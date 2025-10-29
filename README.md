@@ -66,4 +66,5 @@ Sigue estos pasos para ejecutar el proyecto localmente:
 
 ## 📸 Vistazo del Proyecto
 
-*(Aquí puedes añadir la captura de pantalla que me mostraste. Puedes arrastrar y soltar la imagen directamente en la edición de GitHub)*
+<img width="1919" height="968" alt="imagen" src="https://github.com/user-attachments/assets/4f87e181-2d74-40e6-82be-6461f026b2c9" />
+
