@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <title>Validación Facial</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f0f2f5;
+        }
+        h1 { color: #1a73e8; }
+        .video-container {
+            border: 5px solid #1a73e8;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            line-height: 0;
+            background-color: #333;
+        }
+        #status-text {
+            font-size: 24px;
+            font-weight: bold;
+            color: #ea4335; /* Rojo por defecto */
+            margin-top: 20px;
+            height: 30px;
+            transition: color 0.3s;
+        }
+        #status-text.success {
+            color: #34a853; /* Verde */
+        }
+    </style>
+</head>
+<body>
+    <h1>Validación de Asistencia</h1>
+    <p>Por favor, mire a la cámara y siga las instrucciones.</p>
+
+    <div class="video-container">
+        <img src="{% url 'video_feed' %}" width="640" height="480" id="video-feed">
+    </div>
+
+    <h2 id="status-text">Iniciando cámara...</h2>
+
+    <script>
+        // Obtenemos el token CSRF de la etiqueta meta
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        const statusText = document.getElementById('status-text');
+        const videoFeed = document.getElementById('video-feed');
+        let statusInterval;
+
+        // Función para sondear el estado de la validación
+        async function checkStatus() {
+            try {
+                const response = await fetch("{% url 'validation_status' %}");
+                const data = await response.json();
+
+                // Actualizar el texto de estado
+                statusText.textContent = data.status;
+
+                if (data.success) {
+                    // --- ¡ÉXITO! ---
+                    statusText.textContent = "¡Validado! Guardando...";
+                    statusText.classList.add('success');
+
+                    // Detener el sondeo
+                    clearInterval(statusInterval);
+
+                    // Detener el stream de video (opcional, pero buena práctica)
+                    videoFeed.src = "";
+
+                    // Llamar a la vista para procesar y guardar
+                    await saveValidation();
+                } else {
+                    // Cambiar el color del texto si detecta un rostro
+                    if (data.status.includes('Parpadee')) {
+                        statusText.style.color = '#fbbc05'; // Amarillo
+                    } else {
+                        statusText.style.color = '#ea4335'; // Rojo
+                    }
+                }
+            } catch (error) {
+                console.error('Error al verificar estado:', error);
+                statusText.textContent = "Error de conexión. Recargue.";
+                clearInterval(statusInterval);
+            }
+        }
+
+        // Función para guardar la validación
+        async function saveValidation() {
+            try {
+                const response = await fetch("{% url 'process_validation' %}", {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken // Enviar el token CSRF
+                    },
+                    // No es necesario enviar body, los datos están en la sesión
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'ok') {
+                    statusText.textContent = "¡Asistencia registrada!";
+                    // Redirigir de vuelta al inicio después de 2 segundos
+                    setTimeout(() => {
+                        window.location.href = "{% url 'index' %}";
+                    }, 2000);
+                } else {
+                    statusText.textContent = `Error: ${data.message}`;
+                    statusText.style.color = '#ea4335';
+                }
+            } catch (error) {
+                console.error('Error al guardar:', error);
+                statusText.textContent = "Error de guardado.";
+            }
+        }
+
+        // Iniciar el sondeo de estado 3 veces por segundo
+        statusInterval = setInterval(checkStatus, 333); // 333ms
+    </script>
+</body>
+</html>

@@ -2,11 +2,14 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    # Ruta para la página principal
     path('', views.index, name='index'),
-
-    # Ruta para el feed de video
+    path('validate/', views.validate_view, name='validate_view'),
     path('video_feed/', views.video_feed, name='video_feed'),
-    path('capture_snapshot/', views.capture_snapshot, name='capture_snapshot'),
-    path('clear_captures/', views.clear_captures, name='clear_captures'),
+
+    # --- RUTAS NUEVAS ---
+    # Para que el JS pregunte el estado (Ej: "Parpadee")
+    path('validation_status/', views.validation_status, name='validation_status'),
+
+    # Para que el JS ordene guardar la foto y los datos
+    path('process_validation/', views.process_validation, name='process_validation'),
 ]

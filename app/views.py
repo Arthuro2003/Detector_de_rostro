@@ -1,70 +1,100 @@
 # app/views.py
 
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.http import StreamingHttpResponse, JsonResponse
-from .camera import cam  # <-- Importamos la INSTANCIA global 'cam'
-import os
-import datetime
-from django.conf import settings
+from .models import Asistencia
+from .forms import AsistenciaForm
+# --- Importamos la nueva instancia de la cámara ---
+from .camera import liveness_cam
+import time
 
 
-# --- VISTA INDEX MODIFICADA ---
-# Ahora escanea la carpeta de capturas y las envía a la plantilla
+# Vista index (sin cambios)
 def index(request):
-    captures_dir = os.path.join(settings.MEDIA_ROOT, 'captures')
-    image_files = []
-
-    # Nos aseguramos de que el directorio exista
-    if os.path.exists(captures_dir):
-        # Listamos los archivos y los ordenamos por fecha de modificación (más nuevos primero)
-        files = sorted(
-            [f for f in os.listdir(captures_dir) if f.endswith('.jpg')],
-            key=lambda f: os.path.getmtime(os.path.join(captures_dir, f)),
-            reverse=True
-        )
-
-        for filename in files:
-            filepath = os.path.join(captures_dir, filename)
-            mtime = os.path.getmtime(filepath)
-            image_files.append({
-                'url': os.path.join(settings.MEDIA_URL, 'captures', filename),
-                'timestamp': datetime.datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
-            })
-
-    return render(request, 'index.html', {'images': image_files})
+    if request.method == 'POST':
+        form = AsistenciaForm(request.POST)
+        if form.is_valid():
+            request.session['form_data'] = form.cleaned_data
+            return redirect('validate_view')
+    else:
+        form = AsistenciaForm()
+    asistencias_registradas = Asistencia.objects.all().order_by('-fecha_registro')
+    context = {
+        'form': form,
+        'asistencias': asistencias_registradas
+    }
+    return render(request, 'index.html', context)
 
 
-# --- VISTA GEN MODIFICADA ---
-# Ya no necesita el argumento 'camera', usa la global 'cam'
-def gen():
+# Vista validate_view (sin cambios)
+def validate_view(request):
+    form_data = request.session.get('form_data')
+    if not form_data:
+        return redirect('index')
+
+    # Reseteamos el estado de la cámara cada vez que se carga la página
+    liveness_cam.__init__()  # Reinicia la cámara y los contadores
+
+    return render(request, 'validate.html')
+
+
+# --- FUNCIÓN GENERADORA MODIFICADA ---
+def gen(camera):
     while True:
-        frame = cam.get_frame()
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
+        frame_bytes, status, success = camera.get_frame()
+
+        if frame_bytes:
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n\r\n')
+
+        # Enviamos el estado como una cabecera HTTP
+        # (El JS no puede leer esto, usaremos el endpoint de status)
+        # Lo dejamos por si acaso, pero crearemos un endpoint mejor
+
+        if success:
+            print("Validación exitosa, deteniendo stream.")
+            break  # Detiene el generador si la validación fue exitosa
+
+        time.sleep(0.05)  # Pequeña pausa para no sobrecargar el CPU
 
 
 # --- VISTA VIDEO_FEED MODIFICADA ---
 def video_feed(request):
-    return StreamingHttpResponse(gen(),
+    # Usamos la instancia global 'liveness_cam'
+    return StreamingHttpResponse(gen(liveness_cam),
                                  content_type='multipart/x-mixed-replace; boundary=frame')
 
 
-# --- VISTA NUEVA: Para el botón "Tomar Captura" ---
-def capture_snapshot(request):
-    file_url, timestamp = cam.save_manual_capture()
-    if file_url:
-        return JsonResponse({'status': 'ok', 'url': file_url, 'timestamp': timestamp})
-    else:
-        return JsonResponse({'status': 'error', 'message': 'No se pudo capturar la imagen'})
+# --- VISTA NUEVA: Para que el JS pregunte el estado ---
+def validation_status(request):
+    """
+    Provee al frontend el estado actual de la validación.
+    """
+    return JsonResponse({
+        'status': liveness_cam.status,
+        'success': liveness_cam.validation_success
+    })
 
 
-# --- VISTA NUEVA: Para el botón "Limpiar Capturas" ---
-def clear_captures(request):
-    try:
-        captures_dir = os.path.join(settings.MEDIA_ROOT, 'captures')
-        for filename in os.listdir(captures_dir):
-            if filename.endswith('.jpg'):
-                os.remove(os.path.join(captures_dir, filename))
-        return JsonResponse({'status': 'ok'})
-    except Exception as e:
-        return JsonResponse({'status': 'error', 'message': str(e)})
+# --- VISTA NUEVA: Para guardar la asistencia ---
+def process_validation(request):
+    """
+    Se llama desde JS cuando 'validation_status' devuelve success=True.
+    Guarda la asistencia en la BD.
+    """
+    if request.method == 'POST':
+        form_data = request.session.get('form_data')
+        if not form_data:
+            return JsonResponse({'status': 'error', 'message': 'Sesión expirada.'})
+
+        # Usamos la instancia de la cámara para guardar la foto
+        success, message = liveness_cam.save_assistance(form_data)
+
+        if success:
+            # Limpiamos la sesión después de guardar
+            request.session.pop('form_data', None)
+            return JsonResponse({'status': 'ok', 'message': message})
+        else:
+            return JsonResponse({'status': 'error', 'message': message})
+
+    return JsonResponse({'status': 'error', 'message': 'Método no permitido'})
