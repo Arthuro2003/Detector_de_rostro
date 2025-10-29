@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detector de Rostros Interactivo</title>
+
+    <style>
+        body, html {
+            height: 100%;
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+        }
+
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        h1 {
+            color: #1a73e8;
+            margin-top: 0;
+        }
+
+        .video-container {
+            border: 5px solid #1a73e8;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            line-height: 0;
+            margin-bottom: 20px;
+        }
+
+
+        .controls {
+            margin-bottom: 30px;
+        }
+
+
+        .btn {
+            font-size: 16px;
+            padding: 10px 20px;
+            border-radius: 5px;
+            border: none;
+            cursor: pointer;
+            margin: 0 10px;
+            transition: background-color 0.3s;
+        }
+
+        .btn-capture {
+            background-color: #34a853;
+            color: white;
+        }
+        .btn-capture:hover { background-color: #2c8f45; }
+
+        .btn-clear {
+            background-color: #ea4335;
+            color: white;
+        }
+        .btn-clear:hover { background-color: #c5372c; }
+
+
+        #gallery-container {
+            width: 90%;
+            max-width: 1000px;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+
+        #gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 10px;
+        }
+
+
+        .gallery-item {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .gallery-item img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .gallery-item p {
+            margin: 0;
+            padding: 10px;
+            font-size: 14px;
+            color: #555;
+            background-color: #fafafa;
+            border-top: 1px solid #eee;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Detector de Rostros Interactivo</h1>
+        <p>Práctica de Construcción de Software (Django + OpenCV)</p>
+
+        <div class="video-container">
+            <img src="{% url 'video_feed' %}" width="640" height="480">
+        </div>
+
+        <div class="controls">
+            <button id="capture-btn" class="btn btn-capture">Tomar Captura</button>
+            <button id="clear-btn" class="btn btn-clear">Limpiar Capturas</button>
+        </div>
+
+        <div id="gallery-container">
+            <h2>Capturas Guardadas</h2>
+            <hr>
+            <div id="gallery">
+                {% for image in images %}
+                <div class="gallery-item">
+                    <a href="{{ image.url }}" target="_blank">
+                        <img src="{{ image.url }}" alt="Captura">
+                    </a>
+                    <p>{{ image.timestamp }}</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        function addImageToGallery(url, timestamp) {
+            const gallery = document.getElementById('gallery');
+            const newItem = document.createElement('div');
+            newItem.className = 'gallery-item';
+
+            newItem.innerHTML = `
+                <a href="${url}" target="_blank">
+                    <img src="${url}" alt="Captura">
+                </a>
+                <p>${timestamp}</p>
+            `;
+
+
+            gallery.prepend(newItem);
+        }
+
+        // 1. Botón "Tomar Captura"
+        document.getElementById('capture-btn').addEventListener('click', function() {
+            fetch("{% url 'capture_snapshot' %}")
+                .then(response => response.json())
+                .then(data => {
+                    if(data.status === 'ok') {
+
+                        addImageToGallery(data.url, data.timestamp);
+                    } else {
+                        alert('Error al capturar: ' + data.message);
+                    }
+                });
+        });
+
+
+        document.getElementById('clear-btn').addEventListener('click', function() {
+            if (!confirm('¿Estás seguro de que deseas borrar TODAS las capturas?')) {
+                return;
+            }
+
+            fetch("{% url 'clear_captures' %}")
+                .then(response => response.json())
+                .then(data => {
+                    if(data.status === 'ok') {
+                        document.getElementById('gallery').innerHTML = '';
+                    } else {
+                        alert('Error al limpiar: ' + data.message);
+                    }
+                });
+        });
+
+    </script>
+
+</body>
+</html>

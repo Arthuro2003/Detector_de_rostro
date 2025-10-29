@@ -1,0 +1,14 @@
+# Entorno virtual de Python
+venv/
+
+# Base de datos de desarrollo de Django
+db.sqlite3
+
+# Archivos compilados de Python
+__pycache__/
+*.pyc
+
+# Archivos de media generados (las capturas)
+# Esto es opcional, pero es buena práctica no subir
+# las imágenes de prueba al repositorio.
+media/captures/*.jpg
